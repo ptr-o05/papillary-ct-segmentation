@@ -66,7 +66,8 @@ to skip the case, or to abort the batch.
 2. In Slicer's Python console:
 
    ```python
-   exec(open(r"/path/to/papillary_segmentation.py").read())
+   p = r"/path/to/papillary_segmentation.py"
+   exec(open(p).read(), {"__file__": p, "__name__": "__main__"})
    ```
 
    or start Slicer with `Slicer --python-script /path/to/papillary_segmentation.py`.
