@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the accompanying article (preferred-citation) and this repository."
+title: "papillary-ct-segmentation: automated 3D segmentation and radiomics of the left ventricular papillary muscles on cardiac CT"
+type: software
+version: 1.0.0
+date-released: 2026-09-25
+license: MIT
+repository-code: "https://github.com/<organisation>/papillary-ct-segmentation"
+authors:
+  - family-names: Olbryś
+    given-names: Piotr
+    affiliation: "Department of Clinical Physiology, Centre of Postgraduate Medical Education, Warsaw, Poland"
+  # TODO: add the remaining code contributors
+preferred-citation:
+  type: article
+  title: "Papillary Muscle Remodelling in Advanced HFrEF: Integrating Automated 3D Segmentation, CT Radiomics, and Plasma Proteomics"
+  authors:
+    - family-names: Olbryś
+      given-names: Piotr
+    # TODO: complete the author list as in the published article
+  journal: "TODO"
+  year: 2026
+  doi: "TODO"

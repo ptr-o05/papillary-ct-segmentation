@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.seg.nrrd
+*.tsv
+processing_log.csv
