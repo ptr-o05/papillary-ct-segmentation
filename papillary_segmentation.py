@@ -77,7 +77,7 @@ class SplitError(ValueError):
 
 def threshold_lv_tissue(image_hu, lv_mask, hu_min=HU_MIN, hu_max=HU_MAX_DEFAULT):
     # Voxels of the LV cavity mask whose intensity lies in min-max HU range
-    # Contrast-enhanced blood pool lies above max HU threshold; fatty (from -190 to-30 HU) and lean (from 0 to 242 HU) tissue is retained, bounds are inclusive
+    # Contrast-enhanced blood pool lies above max HU threshold; fatty (from -190 to -30 HU) and lean (from 0 to 242 HU) tissue is retained, bounds are inclusive
 
     return (lv_mask > 0) & (image_hu >= hu_min) & (image_hu <= hu_max)
 
@@ -176,7 +176,7 @@ def find_papillary_cores(tissue_mask, voxel_mm, lv_depth_map, lv_center,
 
 # Step 3a: re-grow the eroded cores to the full thresholded tissue mask
 # A watershed on a flat cost image seeded with the cores is a geodesic nearest-seed partition of the tissue mask
-# Discarded components are entered as a third ('debris') label so that they do not get attached toeither muscle; returns an integer label map (1 = core1, 2 = core2, 3 = debris)
+# Discarded components are entered as a third ('debris') label so that they do not get attached to either muscle; returns an integer label map (1 = core1, 2 = core2, 3 = debris)
 
 def regrow_cores(tissue_mask, core1, core2, discarded):
     markers = np.zeros(tissue_mask.shape, dtype=np.int32)
@@ -188,7 +188,7 @@ def regrow_cores(tissue_mask, core1, core2, discarded):
     return watershed(flat_cost, markers=markers, mask=tissue_mask)
 
 # Fallback for Step 2/3: seeded watershed on the negative distance transform of the tissue mask, with seeds at the two thickest, deepest, sufficiently separated local maxima
-# Used only when func:'find_papillary_cores' returns 'None'
+# Used only when find_papillary_cores() returns 'None'
 
 def split_by_distance_peaks(tissue_mask, lv_depth_map, voxel_mm, lv_center,
                             min_angle_deg=MIN_CORE_ANGLE_DEG,
@@ -272,7 +272,7 @@ def split_papillary_muscles(tissue_mask, lv_mask, voxel_mm, septal_vector=None,
     tissue_fraction = n_tissue / n_lv if n_lv else float("nan")
     if check_blood_pool and n_lv and tissue_fraction > BLOOD_POOL_FRACTION_LIMIT:
         raise SplitError(
-            f"Residual blood pool: thresholded tissue is {tissue_fraction * 100:.0f}% of the LV"
+            f"Residual blood pool: thresholded tissue is {tissue_fraction * 100:.0f}% of the LV "
             f"cavity (> {BLOOD_POOL_FRACTION_LIMIT * 100:.0f}%), lower the upper HU threshold")
     if n_tissue == 0:
         raise SplitError("Thresholded LV tissue mask is empty")
@@ -347,7 +347,7 @@ def _ensure_scikit_image():
     if skmorph is not None:
         return True
     if not slicer.util.confirmOkCancelDisplay(
-            "This script requires the Python package 'scikit-image', which is not"
+            "This script requires the Python package 'scikit-image', which is not "
             "installed in this 3D Slicer. Install it now?"):
         return False
     slicer.util.pip_install("scikit-image")
