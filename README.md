@@ -24,11 +24,17 @@ trabeculae can replace the localization step.
 
 | Step | Operation | Key parameters |
 |---|---|---|
-| 0 | Resampling of the CT volume to isotropic voxels (B-spline) | 0.75 mm |
+| 0 | Segmentation is performed on the native voxel grid of the CT (no resampling) | — |
 | 1 | Chamber localization with TotalSegmentator (`heartchambers_highres`); intensity window applied inside the LV cavity mask to remove contrast-enhanced blood pool while keeping fatty and lean tissue | −190 … +242 HU (upper bound adjustable per case) |
 | 2 | Multi-scale morphological opening of the thresholded LV tissue with a spherical structuring element; connected components scored by *volume × compactness × cavity depth*; the two best components that are angularly and spatially separated are the papillary cores. The scan stops at the largest radius that yields two cores (least aggressive erosion). | radius 3.5 → 1.0 mm, step 0.5 mm; min. core volume 0.10 mL; ≥ 45° about the LV centroid; ≥ 12 mm apart |
 | 3 | Re-growth of the cores to the full thresholded tissue mask by a seeded watershed (discarded components enter as a third "debris" label); light clean-up (2-iteration erosion → largest component → 2-iteration dilation ∩ mask); anatomical labelling by the angle between each muscle's centroid vector and the LV→RV (septal) direction: the angularly farther muscle is the APM, the closer one the PPM. The LV myocardium minus both papillary masks is kept as a third region. | — |
-| 4 | PyRadiomics feature extraction (SlicerRadiomics) for APM, PPM and myocardium: first-order, GLCM, GLRLM, GLSZM, GLDM, NGTDM (shape is computed but was not analysed in the paper); re-segmentation to −190 … +242 HU; optional sweep over several fixed bin widths | `params/pm_radiomics_bin16.yaml`; bin widths 16 HU (main) or 2, 4, 8, 16, 32 HU (stability analysis) |
+| 4 | PyRadiomics feature extraction (SlicerRadiomics) for APM, PPM and myocardium: image and masks resampled to 0.75 mm isotropic (B-spline for the image), re-segmentation to −190 … +242 HU; first-order, GLCM, GLRLM, GLSZM, GLDM, NGTDM (shape is computed but was not analysed in the paper); optional sweep over several fixed bin widths | `params/pm_radiomics_bin16.yaml`; bin widths 16 HU (main) or 2, 4, 8, 16, 32 HU (stability analysis) |
+
+Millimetre parameters of Steps 2–3 are converted to voxels with the in-plane voxel spacing, and the
+morphological operations use structuring elements that are isotropic in voxel units. This is exactly how
+the masks of the published analysis were produced. On scans whose slice spacing differs from the in-plane
+spacing, the effective size of these parameters along the scanner z axis scales with the slice spacing
+(e.g. 0.43 mm in-plane / 0.20 mm slices: a 3.5 mm opening radius corresponds to about 1.6 mm along z).
 
 Fallbacks, both recorded per case in `processing_log.csv`:
 
@@ -77,18 +83,17 @@ to skip the case, or to abort the batch.
    * **PyRadiomics parameter file** – defaults to `params/pm_radiomics_bin16.yaml`,
    * **Bin widths (HU)** – `16` reproduces the main analysis, `2,4,8,16,32` the bin-width stability analysis (each value overrides `binWidth` in the parameter file),
    * **Upper HU threshold** – default 242 HU,
-   * optional saving of the TotalSegmentator chamber segmentation and of the resampled CT.
+   * optional saving of the TotalSegmentator chamber segmentation.
 4. **Start batch**. **Stop after current case** interrupts the loop cleanly; the batch can be resumed later from the next file.
 
 ## Outputs (per case `<id>`)
 
 | File | Content |
 |---|---|
-| `<id>_segmentation.seg.nrrd` | Segments `APM`, `PPM`, `Myocardium` on the 0.75 mm grid |
+| `<id>_segmentation.seg.nrrd` | Segments `APM`, `PPM`, `Myocardium` on the native CT grid |
 | `<id>_radiomics_bw<B>.tsv` | PyRadiomics features, one column per segment (`<id>_segment_APM`, …), one file per bin width *B* |
 | `<id>_TotalSegmentator.seg.nrrd` | (optional) raw chamber segmentation |
-| `<id>_CT_0.75mm.nrrd` | (optional) resampled CT used for all subsequent steps |
-| `processing_log.csv` | One row per case: status, upper HU threshold used, manual correction flag, thresholded-tissue fraction of the LV, split method, opening radius, labelling method, APM/PPM angle to the septal vector, APM/PPM/myocardium volumes, bin widths, processing time |
+| `processing_log.csv` | One row per case: status, voxel spacing, upper HU threshold used, manual correction flag, thresholded-tissue fraction of the LV, split method, opening radius, labelling method, APM/PPM angle to the septal vector, APM/PPM/myocardium volumes, bin widths, processing time |
 
 The log is the provenance record for a batch; report the number of cases that
 needed a threshold change, manual correction, or either fallback.
@@ -112,7 +117,7 @@ needed a threshold change, manual correction, or either fallback.
   `threshold_lv_tissue`, `find_papillary_cores`, `regrow_cores`,
   `split_by_distance_peaks`, `remove_trabecular_bridges`, `classify_apm_ppm`
   and the end-to-end `split_papillary_muscles`. Importable without Slicer.
-* **Slicer application**: GUI, resampling, TotalSegmentator call, interactive
+* **Slicer application**: GUI, TotalSegmentator call, interactive
   failure handling, segmentation export, SlicerRadiomics job queue, logging.
 
 All numeric parameters are module-level constants at the top of the file.
