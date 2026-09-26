@@ -2,7 +2,7 @@
 Automated 3D segmentation of the left ventricular papillary muscles (APM, PPM) and myocardium on contrast-enhanced cardiac CT, with PyRadiomics feature extraction — a 3D Slicer batch script.
 Pipeline (see README.md and the Methods section of the accompanying paper):
 
-  Step 0  Resample the CT volume to isotropic 0.75 mm spacing (B-spline).
+  The CT volume is processed on its native voxel grid (no resampling before segmentation).
   Step 1  Chamber localization with TotalSegmentator (task ``heartchambers_highres``), then intensity windowing of the left ventricular (LV) cavity mask to
           -190 ... +242 HU. This removes contrast-enhanced blood pool and keeps papillary/trabecular tissue (fatty and lean).
   Step 2  Multi-scale morphological opening of the thresholded LV tissue with a spherical structuring element (radius 3.5 -> 1.0 mm, step 0.5 mm).
@@ -10,12 +10,18 @@ Pipeline (see README.md and the Methods section of the accompanying paper):
   Step 3  Re-growth of the two cores to the full thresholded tissue mask with a seeded (flat-cost) watershed, a light morphological clean-up, and anatomical labelling: the muscle whose centroid vector is angularly
           farther from the LV->RV (septal) direction is the anterolateral papillary muscle (APM), the closer one the posteromedial (PPM). The LV myocardium (TotalSegmentator) with both papillary masks removed is kept as a third region.
   Step 4  PyRadiomics feature extraction (SlicerRadiomics) for APM, PPM and myocardium with the supplied parameter file, optionally repeated over several fixed bin widths.
+          The image and masks are resampled to 0.75 mm isotropic spacing by PyRadiomics (resampledPixelSpacing in the parameter file).
 
-NumPy / SciPy / scikit-image and can be imported and unit-tested outside 3D Slicer. The GUI and I/O section requires 3D Slicer with the TotalSegmentator and SlicerRadiomics extensions installed.
+Millimetre parameters of Steps 2-3 are converted to voxels with the in-plane (x) voxel spacing, and all morphological operations use
+structuring elements that are isotropic in voxel units. This is how the masks of the published analysis were produced; on scans whose
+slice spacing differs from the in-plane spacing the effective size of these parameters along z scales with the slice spacing.
+
+The core algorithm (everything above the '---- 3D Slicer' marker) is pure NumPy / SciPy / scikit-image and can be imported and unit-tested outside 3D Slicer. The GUI and I/O section requires 3D Slicer with the TotalSegmentator and SlicerRadiomics extensions installed.
 
 Usage inside 3D Slicer (Python console):
 
-    exec(open(r"/path/to/papillary_segmentation.py").read())
+    p = r"/path/to/papillary_segmentation.py"
+    exec(open(p).read(), {"__file__": p, "__name__": "__main__"})
 
 or from the command line:
 
@@ -42,7 +48,6 @@ except ImportError:
 
 # Segmentation parameters
 
-RESAMPLE_SPACING_MM = 0.75          # isotropic voxel size after resampling
 TOTALSEGMENTATOR_TASK = "heartchambers_highres"
 
 HU_MIN = -190                       # lower bound of the tissue window
@@ -258,7 +263,7 @@ def classify_apm_ppm(center1, center2, lv_center, septal_vector):
 # Steps 2-3 end to end:
 # :param tissue_mask: boolean array, thresholded LV tissue
 # :param lv_mask: boolean array, full LV cavity mask (blood pool + tissue)
-# :param voxel_mm: isotropic voxel size in mm
+# :param voxel_mm: in-plane (x) voxel spacing in mm, used to convert the mm parameters to voxels
 # :param septal_vector: LV-centroid -> RV-centroid vector in voxel index space, or 'None'
 # :param check_blood_pool: raise :class:'SplitError' when the tissue mask occupies more than 'BLOOD_POOL_FRACTION_LIMIT' of the LV (residual contrast-enhanced blood); disabled after manual correction
 # :returns: dict with boolean masks 'apm'/'ppm' (cleaned) and QC fields
@@ -333,7 +338,7 @@ except ImportError:
 
 
 LOG_COLUMNS = [
-    "case_id", "status", "upper_threshold_HU", "manual_correction",
+    "case_id", "status", "voxel_spacing_mm", "upper_threshold_HU", "manual_correction",
     "tissue_fraction_of_lv", "split_method", "opening_radius_mm",
     "labelling_method", "apm_angle_to_septum_deg", "ppm_angle_to_septum_deg",
     "apm_volume_ml", "ppm_volume_ml", "myocardium_volume_ml",
@@ -448,10 +453,6 @@ class PapillaryMuscleSegmentationWidget(qt.QWidget if qt else object):
         self.save_ts_check = qt.QCheckBox("Save TotalSegmentator chamber segmentation")
         self.save_ts_check.setChecked(True)
         layout.addRow(self.save_ts_check)
-
-        self.save_resampled_check = qt.QCheckBox(f"Save resampled CT volume ({RESAMPLE_SPACING_MM} mm)")
-        self.save_resampled_check.setChecked(False)
-        layout.addRow(self.save_resampled_check)
 
         self.run_radiomics_check = qt.QCheckBox("Extract radiomic features (SlicerRadiomics)")
         self.run_radiomics_check.setChecked(True)
@@ -573,25 +574,14 @@ class PapillaryMuscleSegmentationWidget(qt.QWidget if qt else object):
         self.manual_correction = False
 
         slicer.mrmlScene.Clear(0)
-        native = slicer.util.loadVolume(path)
-        if not native:
+        # Segmentation runs on the native voxel grid; resampling to 0.75 mm is done by PyRadiomics at feature extraction
+        self.volume = slicer.util.loadVolume(path)
+        if not self.volume:
             self._fail_case("could not load volume")
             return
 
-        # Step 0: isotropic resampling
-        self.update_status(f"{self.case_id}\nStep 0/4: resampling to {RESAMPLE_SPACING_MM} mm isotropic")
-        try:
-            self.volume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", f"{self.case_id}_resampled")
-            params = {"InputVolume": native.GetID(), "OutputVolume": self.volume.GetID(),
-                      "spacing": [RESAMPLE_SPACING_MM] * 3, "interpolationType": "bspline"}
-            slicer.cli.runSync(slicer.modules.resamplescalarvolume, None, params)
-            slicer.mrmlScene.RemoveNode(native)
-        except Exception as e:
-            self._fail_case(f"resampling: {e}")
-            return
-
         # Step 1a: chamber localization
-        self.update_status(f"{self.case_id}\nStep 1/4: TotalSegmentator ({TOTALSEGMENTATOR_TASK})")
+        self.update_status(f"{self.case_id}\nStep 1/3: TotalSegmentator ({TOTALSEGMENTATOR_TASK})")
         try:
             import TotalSegmentator
             self.ts_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", f"{self.case_id}_chambers")
@@ -621,19 +611,13 @@ class PapillaryMuscleSegmentationWidget(qt.QWidget if qt else object):
         if self.save_ts_check.checked:
             slicer.util.saveNode(self.ts_node, os.path.join(self.output_dir_edit.currentPath,
                                                             f"{self.case_id}_TotalSegmentator.seg.nrrd"))
-        if self.save_resampled_check.checked:
-            slicer.util.saveNode(self.volume, os.path.join(self.output_dir_edit.currentPath,
-                                                           f"{self.case_id}_CT_{RESAMPLE_SPACING_MM}mm.nrrd"))
 
         self.run_split_step()
 
     def run_split_step(self):
-        """Steps 1b-3: thresholding, APM/PPM separation, interactive recovery."""
-        spacing = self.volume.GetSpacing()
-        if max(spacing) - min(spacing) > 1e-3:
-            self._fail_case(f"volume is not isotropic after resampling: {spacing}")
-            return
-        voxel_mm = spacing[0]
+        # Steps 1b-3: thresholding, APM/PPM separation, interactive recovery
+        spacing = self.volume.GetSpacing()   # (x, y, z) in mm
+        voxel_mm = spacing[0]                # in-plane spacing, as in the published analysis
         image = slicer.util.arrayFromVolume(self.volume)
 
         septal_vector = None
@@ -643,10 +627,10 @@ class PapillaryMuscleSegmentationWidget(qt.QWidget if qt else object):
 
         hu_max = self.threshold_overrides.get(self.case_id, self.hu_max_spin.value)
         while True:
-            self.update_status(f"{self.case_id}\nStep 1/4: thresholding LV cavity to [{HU_MIN}, {hu_max}] HU")
+            self.update_status(f"{self.case_id}\nStep 1/3: thresholding LV cavity to [{HU_MIN}, {hu_max}] HU")
             tissue = threshold_lv_tissue(image, self.lv_arr, HU_MIN, hu_max)
 
-            self.update_status(f"{self.case_id}\nStep 2-3/4: papillary muscle separation")
+            self.update_status(f"{self.case_id}\nStep 2/3: papillary muscle separation")
             try:
                 self.split_result = split_papillary_muscles(tissue, self.lv_arr, voxel_mm, septal_vector)
                 break
@@ -676,6 +660,7 @@ class PapillaryMuscleSegmentationWidget(qt.QWidget if qt else object):
                 return
 
         self.split_result["upper_threshold_HU"] = hu_max
+        self.split_result["voxel_spacing_mm"] = "x".join(f"{v:.3f}" for v in spacing)
         self.build_segmentation_node()
 
     def _ask_on_failure(self, error_msg, hu_max):
@@ -709,7 +694,7 @@ class PapillaryMuscleSegmentationWidget(qt.QWidget if qt else object):
         return "abort"
 
     def _manual_correction(self, tissue):
-        """Let the user edit the thresholded tissue mask in Segment Editor."""
+        # Let the user edit the thresholded tissue mask in Segment Editor
         work_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", f"{self.case_id}_manual")
         work_node.SetReferenceImageGeometryParameterFromVolumeNode(self.volume)
         seg_id = work_node.GetSegmentation().AddEmptySegment("", "LV_tissue")
@@ -735,7 +720,7 @@ class PapillaryMuscleSegmentationWidget(qt.QWidget if qt else object):
         return corrected & self.lv_arr
 
     def build_segmentation_node(self):
-        """Assemble APM, PPM and myocardium (minus papillary muscles) segments."""
+        # Assemble APM, PPM and myocardium (minus papillary muscles) segments
         apm, ppm = self.split_result["apm"], self.split_result["ppm"]
         myo = self.myo_arr & ~apm & ~ppm   # TotalSegmentator labels are disjoint; explicit for safety
 
@@ -781,7 +766,7 @@ class PapillaryMuscleSegmentationWidget(qt.QWidget if qt else object):
             self.finish_case()
             return
         bw, param_path, out_path = self.radiomics_jobs[0]
-        self.update_status(f"{self.case_id}\nStep 4/4: radiomics (bin width {bw} HU), "
+        self.update_status(f"{self.case_id}\nStep 3/3: radiomics (bin width {bw} HU), "
                            f"{len(self.radiomics_jobs)} job(s) left")
         try:
             import SlicerRadiomics
@@ -807,6 +792,7 @@ class PapillaryMuscleSegmentationWidget(qt.QWidget if qt else object):
         row = {
             "case_id": self.case_id,
             "status": status,
+            "voxel_spacing_mm": r.get("voxel_spacing_mm", ""),
             "upper_threshold_HU": r.get("upper_threshold_HU", self.threshold_overrides.get(self.case_id, self.hu_max_spin.value)),
             "manual_correction": self.manual_correction,
             "tissue_fraction_of_lv": r.get("tissue_fraction_of_lv", ""),
