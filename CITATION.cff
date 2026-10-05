@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the accompanying article (preferred-citation) and this repository."
+title: "papillary-ct-segmentation: automated 3D segmentation and radiomics of the left ventricular papillary muscles on cardiac CT"
+type: software
+version: 1.0.0
+date-released: 2026-09-26
+license: MIT
+repository-code: "https://github.com/ptr-o05/papillary-ct-segmentation"
+authors:
+  - family-names: "Olbryś"
+    given-names: "Piotr"
+    affiliation: "Department of Clinical Physiology, Centre of Postgraduate Medical Education, Warsaw, Poland"
+preferred-citation:
+  type: article
+  title: "Automated CT segmentation and radiomics of the papillary muscles in advanced heart failure (manuscript in submission)"
+  year: 2026
+  authors:
+    - family-names: "Olbryś"
+      given-names: "Piotr"
+    - family-names: "Mazuruk"
+      given-names: "Maciej"
+    - family-names: "Rosa"
+      given-names: "Miłosz"
+    - family-names: "Łaba"
+      given-names: "Piotr"
+    - family-names: "Załęska-Kocięcka"
+      given-names: "Marta"
+    - family-names: "Mączewski"
+      given-names: "Maciej"
+    - family-names: "Wojdyńska"
+      given-names: "Zuzanna"
+    - family-names: "Kacperska"
+      given-names: "Marta"
+    - family-names: "Michałowska"
+      given-names: "Ilona"
+    - family-names: "Leszek"
+      given-names: "Przemysław"
+    - family-names: "Paterek"
+      given-names: "Aleksandra"
+    - family-names: "Mączewski"
+      given-names: "Michał"

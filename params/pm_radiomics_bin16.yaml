@@ -1,0 +1,27 @@
+# PyRadiomics parameter file used for APM, PPM and myocardium feature extraction
+# (identical settings to the publication; only binWidth differs between the
+# five stability runs: 2, 4, 8, 16, 32 HU). SlicerRadiomics exports every
+# segment as a binary labelmap with value 1, hence label: 1.
+setting:
+  binWidth: 16
+  symmetricalGLCM: true
+  label: 1
+
+  interpolator: 'sitkBSpline'
+  resampledPixelSpacing: [0.75, 0.75, 0.75]
+  padDistance: 10
+
+  resegmentRange: [-190, 242]
+  resegmentMode: 'absolute'
+
+featureClass:
+  shape:
+  firstorder:
+  glcm:
+  gldm:
+  glrlm:
+  glszm:
+  ngtdm:
+
+imageType:
+  Original: {}
